@@ -1,0 +1,6 @@
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.0Loss: 0.8982, TestAcc: 0.7580, Overall
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.1Loss: 0.9018, TestAcc: 0.7470, Overall
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.2Loss: 0.9001, TestAcc: 0.7500, Overall
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.3Loss: 0.9094, TestAcc: 0.7440, Overall
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.4Loss: 0.9242, TestAcc: 0.7440, Overall
+dataset: citeseer, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.3, lam: 0.7, dropnode_rate: 0.5dropfeature_rate: 0.5Loss: 0.9568, TestAcc: 0.7390, Overall

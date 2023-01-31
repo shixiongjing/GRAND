@@ -1,0 +1,6 @@
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.0Loss: 0.5101, TestAcc: 0.8250, Overall
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.1Loss: 0.5146, TestAcc: 0.8120, Overall
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.2Loss: 0.5665, TestAcc: 0.8180, Overall
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.3Loss: 0.5074, TestAcc: 0.8170, Overall
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.4Loss: 0.5650, TestAcc: 0.7950, Overall
+dataset: pubmed, lr: 0.2, epochs: 5000, hidden: 32, tem: 0.2, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.5Loss: 0.6134, TestAcc: 0.7340, Overall

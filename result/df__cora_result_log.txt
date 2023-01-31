@@ -1,0 +1,6 @@
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.0Loss: 0.7420, TestAcc: 0.8520, Overall
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.1Loss: 0.7725, TestAcc: 0.8550, Overall
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.2Loss: 0.7674, TestAcc: 0.8500, Overall
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.3Loss: 0.8231, TestAcc: 0.8570, Overall
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.4Loss: 0.8971, TestAcc: 0.8350, Overall
+dataset: cora, lr: 0.01, epochs: 5000, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5dropfeature_rate: 0.5Loss: 0.9595, TestAcc: 0.8320, Overall
