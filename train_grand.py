@@ -4,6 +4,7 @@ from __future__ import print_function
 import time
 import argparse
 import numpy as np
+import sys
 
 import torch
 import torch.nn.functional as F
@@ -34,6 +35,8 @@ parser.add_argument('--hidden_droprate', type=float, default=0.5,
                     help='Dropout rate of the hidden layer (1 - keep probability).')
 parser.add_argument('--dropnode_rate', type=float, default=0.5,
                     help='Dropnode rate (1 - keep probability).')
+parser.add_argument('--dropfeature_rate', type=float, default=0.,
+                    help='Dropnode rate (1 - keep probability).')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
 parser.add_argument('--order', type=int, default=5, help='Propagation step')
 parser.add_argument('--sample', type=int, default=4, help='Sampling times of dropnode')
@@ -42,6 +45,7 @@ parser.add_argument('--lam', type=float, default=1., help='Lamda')
 parser.add_argument('--dataset', type=str, default='cora', help='Data set')
 parser.add_argument('--cuda_device', type=int, default=4, help='Cuda device')
 parser.add_argument('--use_bn', action='store_true', default=False, help='Using Batch Normalization')
+parser.add_argument('--logname', default='df_', help='string for output log filename')
 #dataset = 'citeseer'
 #dataset = 'pubmed'
 args = parser.parse_args()
@@ -90,18 +94,31 @@ def propagate(feature, A, order):
 
 def rand_prop(features, training):
     n = features.shape[0]
-    drop_rate = args.dropnode_rate
-    drop_rates = torch.FloatTensor(np.ones(n) * drop_rate)
+    drop_node_rate = args.dropnode_rate
+    
+
+    t = features.shape[1]
+    drop_feature_rate = args.dropfeature_rate
     
     if training:
+
+        drop_node_rates = torch.FloatTensor(np.ones(n) * drop_node_rate)
             
-        masks = torch.bernoulli(1. - drop_rates).unsqueeze(1)
+        masks = torch.bernoulli(1. - drop_node_rates).unsqueeze(1)
 
         features = masks.cuda() * features
+
+
+        if drop_feature_rate != 0.:
+            drop_feature_rates = torch.FloatTensor(np.ones(t) * drop_feature_rate)
+
+            masks2 = torch.bernoulli(1. - drop_feature_rates)
+            features = masks2.cuda() * features
             
     else:
             
-        features = features * (1. - drop_rate)
+        features = features * (1. - drop_node_rate)
+    
     features = propagate(features, A, args.order)    
     return features
 
@@ -235,5 +252,30 @@ def test():
     print("Test set results:",
           "loss= {:.4f}".format(loss_test.item()),
           "accuracy= {:.4f}".format(acc_test.item()))
+    
+    log_result = ("dataset: {}, "
+              "lr: {}, "   
+              "epochs: {}, "   
+              "hidden: {}, "    
+              "tem: {}, "  
+              "lam: {}, " 
+              "dropnode_rate: {}"
+              "dropfeature_rate: {}"
+              "Loss: {:.4f}, "
+              "TestAcc: {:.4f}, "
+              "Overall\n").format(args.dataset,
+                                  args.lr,
+                                  args.epochs,
+                                  args.hidden,
+                                  args.tem,
+                                  args.lam, 
+                                  args.dropnode_rate,
+                                  args.dropfeature_rate,
+                                  loss_test.item(),
+                                  acc_test.item())
+    with open('{}/result/{}_{}_result_log.txt'.format(sys.path[0], args.logname, args.dataset), 'a') as f:
+        f.write(log_result)
+
+
 Train()
 test()
