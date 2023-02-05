@@ -237,7 +237,7 @@ def train(epoch):
         loss_consis_edge = consis_loss(output_list)
 
     # Add feature drops
-    K_f = args.sample_e
+    K_f = args.sample_f
     if K_f > 0 and args.dropfeature_rate > 0:
         X_list = []
         
