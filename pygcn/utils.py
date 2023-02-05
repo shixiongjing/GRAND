@@ -81,6 +81,73 @@ def load_data(dataset_str = 'cora'):
 
     return A, features, labels, idx_train, idx_val, idx_test
 
+def load_data_full(dataset_str = 'cora'):
+    names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
+    objects = []
+    for i in range(len(names)):
+        with open("data/ind.{}.{}".format(dataset_str, names[i]), 'rb') as f:
+            if sys.version_info > (3, 0):
+                objects.append(pkl.load(f, encoding='latin1'))
+            else:
+                objects.append(pkl.load(f))
+    x, y, tx, ty, allx, ally, graph = tuple(objects)
+    test_idx_reorder = parse_index_file("data/ind.{}.test.index".format(dataset_str))
+    test_idx_range = np.sort(test_idx_reorder)
+
+    if dataset_str == 'citeseer':
+        test_idx_range_full = range(min(test_idx_reorder), max(test_idx_reorder)+1)
+        tx_extended = sp.lil_matrix((len(test_idx_range_full), x.shape[1]))
+        tx_extended[test_idx_range-min(test_idx_range), :] = tx
+        tx = tx_extended
+        ty_extended = np.zeros((len(test_idx_range_full), y.shape[1]))
+        ty_extended[test_idx_range-min(test_idx_range), :] = ty
+        ty = ty_extended
+
+    features = sp.vstack((allx, tx)).tolil()
+    features[test_idx_reorder, :] = features[test_idx_range, :]
+    features = normalize(features)
+    graph = nx.from_dict_of_lists(graph)
+    adj = nx.adjacency_matrix(graph)
+    adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
+
+    
+    adj = adj + sp.eye(adj.shape[0])
+    
+    """
+    D1_ = np.array(adj.sum(axis=1))**(-0.5)
+    D2_ = np.array(adj.sum(axis=0))**(-0.5)
+    D1_ = sp.diags(D1_[:,0], format='csr')
+    D2_ = sp.diags(D2_[0,:], format='csr')
+    A_ = adj.dot(D1_)
+    A_ = D2_.dot(A_)
+    """
+    
+    D1 = np.array(adj.sum(axis=1))**(-0.5)
+    D2 = np.array(adj.sum(axis=0))**(-0.5)
+    D1 = sp.diags(D1[:,0], format='csr')
+    D2 = sp.diags(D2[0,:], format='csr')
+    
+    A = adj.dot(D1)
+    A = D2.dot(A)
+
+
+    labels = np.vstack((ally, ty))
+    labels[test_idx_reorder, :] = labels[test_idx_range, :]     # onehot
+
+    idx_train = range(len(y))
+    idx_val = range(len(y), len(y)+500)
+    idx_test = test_idx_range.tolist()
+
+    features = torch.FloatTensor(np.array(features.todense()))
+    labels = torch.LongTensor(np.argmax(labels, -1))
+    A = sparse_mx_to_torch_sparse_tensor(A)
+    adj = sparse_mx_to_torch_sparse_tensor(adj)
+    idx_train = torch.LongTensor(idx_train)
+    idx_val = torch.LongTensor(idx_val)
+    idx_test = torch.LongTensor(idx_test)
+
+    return A, adj, features, labels, idx_train, idx_val, idx_test, graph.edges()
+
 def parse_index_file(filename):
     index = []
     for line in open(filename):
