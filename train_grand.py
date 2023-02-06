@@ -36,15 +36,16 @@ parser.add_argument('--hidden_droprate', type=float, default=0.5,
                     help='Dropout rate of the hidden layer (1 - keep probability).')
 parser.add_argument('--dropnode_rate', type=float, default=0.5,
                     help='Dropnode rate (1 - keep probability).')
-parser.add_argument('--dropfeature_rate', type=float, default=0.3,
+parser.add_argument('--dropfeature_rate', type=float, default=0.1,
                     help='Dropfeature rate (1 - keep probability).')
-parser.add_argument('--dropedge_rate', type=float, default=0.3,
+parser.add_argument('--dropedge_rate', type=float, default=0.1,
                     help='Dropedge rate (1 - keep probability).')
+parser.add_argument('--alpha', type=float, default=1., help='constant controlling weight for consistency loss')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
 parser.add_argument('--order', type=int, default=5, help='Propagation step')
 parser.add_argument('--sample_n', type=int, default=4, help='Sampling times of dropnode')
-parser.add_argument('--sample_e', type=int, default=4, help='Sampling times of dropedge')
-parser.add_argument('--sample_f', type=int, default=4, help='Sampling times of dropfeature')
+parser.add_argument('--sample_e', type=int, default=2, help='Sampling times of dropedge')
+parser.add_argument('--sample_f', type=int, default=2, help='Sampling times of dropfeature')
 parser.add_argument('--tem', type=float, default=0.5, help='Sharpening temperature')
 parser.add_argument('--lam', type=float, default=1., help='Lamda')
 parser.add_argument('--dataset', type=str, default='cora', help='Data set')
@@ -200,27 +201,35 @@ def train(epoch):
     optimizer.zero_grad()
     loss_train = 0.
 
-    # Add node drops
-    X_list = []
     K_n = args.sample_n
-    for k in range(K_n):
-        X_list.append(rand_node_prop(X, training=True))
+    K_e = args.sample_e
+    K_f = args.sample_f
+    if not K_n + K_e + K_f > 0:
+        print('Sampling for edge, node, feature drop is all zero, exit program...')
+        quit()
 
-    output_list = []
-    for k in range(K_n):
-        output_list.append(torch.log_softmax(model(X_list[k]), dim=-1))
+    # Add node drops
+    loss_consis_node = 0
+    if K_n > 0 and args.dropnode_rate > 0:
+        X_list = []
+        for k in range(K_n):
+            X_list.append(rand_node_prop(X, training=True))
 
-    for k in range(K_n):
-        loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
+        output_list = []
+        for k in range(K_n):
+            output_list.append(torch.log_softmax(model(X_list[k]), dim=-1))
 
-    loss_consis_node = consis_loss(output_list)
+        for k in range(K_n):
+            loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
+
+        loss_consis_node = consis_loss(output_list)
 
 
 
 
 
     # Add edge drops
-    K_e = args.sample_e
+    loss_consis_edge = 0
     if K_e > 0 and args.dropedge_rate > 0:
         X_list = []
         
@@ -237,7 +246,7 @@ def train(epoch):
         loss_consis_edge = consis_loss(output_list)
 
     # Add feature drops
-    K_f = args.sample_f
+    loss_consis_feature = 0
     if K_f > 0 and args.dropfeature_rate > 0:
         X_list = []
         
@@ -255,12 +264,14 @@ def train(epoch):
         
         
     loss_train = loss_train/(K_n + K_e + K_f)
+    loss_consis = (loss_consis_node * K_n + loss_consis_edge * K_e + loss_consis_feature * K_f) / (K_n + K_e + K_f)
+    
     #loss_train = F.nll_loss(output_1[idx_train], labels[idx_train]) + F.nll_loss(output_1[idx_train], labels[idx_train])
     #loss_js = js_loss(output_1[idx_unlabel], output_2[idx_unlabel])
     #loss_en = entropy_loss(output_1[idx_unlabel]) + entropy_loss(output_2[idx_unlabel])
     
 
-    loss_train = loss_train + loss_consis_node + loss_consis_edge + loss_consis_feature
+    loss_train = loss_train + args.alpha * loss_consis
     acc_train = accuracy(output_list[0][idx_train], labels[idx_train])
     loss_train.backward()
     optimizer.step()
@@ -268,31 +279,39 @@ def train(epoch):
     # Evaluation Stage
     model.eval()
 
-    round_counter = 1
-    X = rand_node_prop(X,training=False)
-    output = model(X)
-    output = torch.log_softmax(output, dim=-1)
-    loss_val = F.nll_loss(output[idx_val], labels[idx_val]) 
-    acc_val = accuracy(output[idx_val], labels[idx_val])
+    round_counter = 0
+    loss_val_n = 0
+    acc_val_n = 0
+    if K_n > 0 and args.dropnode_rate > 0:
+        X = rand_node_prop(X,training=False)
+        output = model(X)
+        output = torch.log_softmax(output, dim=-1)
+        loss_val_n = F.nll_loss(output[idx_val], labels[idx_val]) 
+        acc_val_n = accuracy(output[idx_val], labels[idx_val])
+        round_counter += 1
 
+    loss_val_f = 0
+    acc_val_f = 0
     if K_f > 0 and args.dropfeature_rate > 0:
         X = rand_feature_prop(X,training=False)
         output = model(X)
         output = torch.log_softmax(output, dim=-1)
-        loss_val += F.nll_loss(output[idx_val], labels[idx_val]) 
-        acc_val += accuracy(output[idx_val], labels[idx_val])
+        loss_val_f = F.nll_loss(output[idx_val], labels[idx_val]) 
+        acc_val_f = accuracy(output[idx_val], labels[idx_val])
         round_counter += 1
 
+    loss_val_e = 0
+    acc_val_e = 0
     if K_e > 0 and args.dropedge_rate > 0:
         X = rand_feature_prop(X,training=False)
         output = model(X)
         output = torch.log_softmax(output, dim=-1)
-        loss_val += F.nll_loss(output[idx_val], labels[idx_val]) 
-        acc_val += accuracy(output[idx_val], labels[idx_val])
+        loss_val_e = F.nll_loss(output[idx_val], labels[idx_val]) 
+        acc_val_e = accuracy(output[idx_val], labels[idx_val])
         round_counter += 1
 
-    acc_val = acc_val/round_counter
-    loss_val = loss_val/round_counter
+    acc_val = (acc_val_e + acc_val_f + acc_val_n)/round_counter
+    loss_val = (loss_val_e * K_e + loss_val_f * K_f + loss_val_n * K_n)/(K_n + K_e + K_f)
 
 
     print('Epoch: {:04d}'.format(epoch+1),
@@ -363,7 +382,7 @@ def Train():
 def test():
     model.eval()
     X = features
-    #X = rand_prop(X, training=False)
+    X = rand_node_prop(X, training=False)
     output = model(X)
     output = torch.log_softmax(output, dim=-1)
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
