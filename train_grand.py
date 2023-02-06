@@ -36,16 +36,16 @@ parser.add_argument('--hidden_droprate', type=float, default=0.5,
                     help='Dropout rate of the hidden layer (1 - keep probability).')
 parser.add_argument('--dropnode_rate', type=float, default=0.5,
                     help='Dropnode rate (1 - keep probability).')
-parser.add_argument('--dropfeature_rate', type=float, default=0.1,
+parser.add_argument('--dropfeature_rate', type=float, default=0.2,
                     help='Dropfeature rate (1 - keep probability).')
-parser.add_argument('--dropedge_rate', type=float, default=0.1,
+parser.add_argument('--dropedge_rate', type=float, default=0.2,
                     help='Dropedge rate (1 - keep probability).')
 parser.add_argument('--alpha', type=float, default=1., help='constant controlling weight for consistency loss')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
 parser.add_argument('--order', type=int, default=5, help='Propagation step')
 parser.add_argument('--sample_n', type=int, default=4, help='Sampling times of dropnode')
-parser.add_argument('--sample_e', type=int, default=2, help='Sampling times of dropedge')
-parser.add_argument('--sample_f', type=int, default=2, help='Sampling times of dropfeature')
+parser.add_argument('--sample_e', type=int, default=4, help='Sampling times of dropedge')
+parser.add_argument('--sample_f', type=int, default=4, help='Sampling times of dropfeature')
 parser.add_argument('--tem', type=float, default=0.5, help='Sharpening temperature')
 parser.add_argument('--lam', type=float, default=1., help='Lamda')
 parser.add_argument('--dataset', type=str, default='cora', help='Data set')
@@ -96,6 +96,16 @@ def propagate(feature, A, order):
         #print(y.add_(x))
         y.add_(x)
         
+    return y.div_(order+1.0).detach_()
+
+def propagate_e(feature, a, order):
+    #feature = F.dropout(feature, args.dropout, training=training)
+    #x = feature
+    y = torch.spmm(a,feature).detach_()
+    x = y
+    for i in range(order):
+        x = torch.spmm(a, x).detach_()
+        y.add_(x)
     return y.div_(order+1.0).detach_()
 
 def preprocess(a):
@@ -173,7 +183,7 @@ def rand_edge_prop(features, training):
         #a = sparse_dropout(A, training, drop_rate)
     else:
         a = A#preprocess(adj)
-    features = propagate(features, a, args.order)    
+    features = propagate_e(features, a, args.order)    
     return features
 
 
@@ -279,40 +289,13 @@ def train(epoch):
     # Evaluation Stage
     model.eval()
 
-    round_counter = 0
-    loss_val_n = 0
-    acc_val_n = 0
-    if K_n > 0 and args.dropnode_rate > 0:
-        X = rand_node_prop(X,training=False)
-        output = model(X)
-        output = torch.log_softmax(output, dim=-1)
-        loss_val_n = F.nll_loss(output[idx_val], labels[idx_val]) 
-        acc_val_n = accuracy(output[idx_val], labels[idx_val])
-        round_counter += 1
-
-    loss_val_f = 0
-    acc_val_f = 0
-    if K_f > 0 and args.dropfeature_rate > 0:
-        X = rand_feature_prop(X,training=False)
-        output = model(X)
-        output = torch.log_softmax(output, dim=-1)
-        loss_val_f = F.nll_loss(output[idx_val], labels[idx_val]) 
-        acc_val_f = accuracy(output[idx_val], labels[idx_val])
-        round_counter += 1
-
-    loss_val_e = 0
-    acc_val_e = 0
-    if K_e > 0 and args.dropedge_rate > 0:
-        X = rand_feature_prop(X,training=False)
-        output = model(X)
-        output = torch.log_softmax(output, dim=-1)
-        loss_val_e = F.nll_loss(output[idx_val], labels[idx_val]) 
-        acc_val_e = accuracy(output[idx_val], labels[idx_val])
-        round_counter += 1
-
-    acc_val = (acc_val_e + acc_val_f + acc_val_n)/round_counter
-    loss_val = (loss_val_e * K_e + loss_val_f * K_f + loss_val_n * K_n)/(K_n + K_e + K_f)
-
+    
+    X = rand_node_prop(X,training=False)
+    output = model(X)
+    output = torch.log_softmax(output, dim=-1)
+    loss_val = F.nll_loss(output[idx_val], labels[idx_val]) 
+    acc_val = accuracy(output[idx_val], labels[idx_val])
+    
 
     print('Epoch: {:04d}'.format(epoch+1),
           'loss_train: {:.4f}'.format(loss_train.item()),
