@@ -382,6 +382,7 @@ def test():
               "lam: {}, " 
               "dropnode_rate: {}, "
               "dropfeature_rate: {}, "
+              "dropedge_rate: {}, "
               "Loss: {:.4f}, "
               "TestAcc: {:.4f}, "
               "Overall\n").format(args.dataset,
@@ -392,6 +393,7 @@ def test():
                                   args.lam, 
                                   args.dropnode_rate,
                                   args.dropfeature_rate,
+                                  args.dropedge_rate,
                                   loss_test.item(),
                                   acc_test.item())
     log_result_pre = ( 
