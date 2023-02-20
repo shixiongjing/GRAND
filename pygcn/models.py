@@ -4,7 +4,22 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import numpy as np
-from pygcn.layers import GraphConvolution, MLPLayer
+from pygcn.layers import GraphConvolution, MLPLayer, GraphConvolution_sim
+
+class GCN_sim(nn.Module):
+    def __init__(self, nfeat, nhid, nclass, dropout):
+        super(GCN_sim, self).__init__()
+
+        self.gc1 = GraphConvolution_sim(nfeat, nhid,bias=True)
+        self.gc2 = GraphConvolution_sim(nhid, nclass,bias=True)
+        self.dropout = dropout
+
+    def forward(self, x, adj):
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = F.relu(self.gc1(x, adj))
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = self.gc2(x, adj)
+        return x
 
 class GCN(nn.Module):
     def __init__(self, nfeat, nhid, nclass, input_droprate, hidden_droprate, use_bn=False):

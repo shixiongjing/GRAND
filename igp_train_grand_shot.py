@@ -2,9 +2,12 @@ from __future__ import division
 from __future__ import print_function
 
 import time
+import random
 import argparse
+import collections
 import numpy as np
 import sys
+import copy
 
 import torch
 import torch.nn.functional as F
@@ -12,6 +15,7 @@ import torch.optim as optim
 
 from pygcn.utils import load_data, load_data_full, accuracy, sparse_mx_to_torch_sparse_tensor
 from pygcn.models import GCN, MLP
+from IGP import get_igp_train_set
 import scipy.sparse as sp
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
@@ -52,6 +56,9 @@ parser.add_argument('--dataset', type=str, default='cora', help='Data set')
 parser.add_argument('--cuda_device', type=int, default=4, help='Cuda device')
 parser.add_argument('--use_bn', action='store_true', default=False, help='Using Batch Normalization')
 parser.add_argument('--logname', default='df_', help='string for output log filename')
+parser.add_argument('--shots',type = int, default = 20, help = 'N-way K-shots, max == default == 20. How many samples foe each classes.')
+parser.add_argument('--active',action='store_true', default=False,
+                    help='Disables CUDA training.')
 #dataset = 'citeseer'
 #dataset = 'pubmed'
 args = parser.parse_args()
@@ -63,8 +70,35 @@ torch.manual_seed(args.seed)
 if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
+
+def N_shot(idx,labels,shots):
+    t_idx_dic = collections.defaultdict(list)
+    label_list = labels.numpy()[:len(idx)]
+    for i in range(len(label_list)):
+        t_idx_dic[label_list[i]].append(idx.numpy()[i])
+    
+    new_idx_train = []
+    for k in t_idx_dic.keys():
+        new_idx_train += random.choices(t_idx_dic[k],k=shots)
+
+    new_idx_train = torch.LongTensor(new_idx_train)
+    return new_idx_train
+
+
+
+
+
 # Load data
-A, adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
+A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
+
+real_labels = copy.deepcopy(labels)
+real_labels = real_labels.cuda()
+if args.shots == args.shots: # check for NaN value
+    new_idx_train = N_shot(idx_train,labels,args.shots)
+    if args.active:
+        new_idx_train, new_labels = get_igp_train_set(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
+    idx_train = new_idx_train
+
 idx_unlabel = torch.range(idx_train.shape[0], labels.shape[0]-1, dtype=int)
 
 # Model and optimizer
@@ -86,6 +120,7 @@ if args.cuda:
     idx_val = idx_val.cuda()
     idx_test = idx_test.cuda()
     idx_unlabel = idx_unlabel.cuda()
+
 
 def propagate(feature, A, order):
     #feature = F.dropout(feature, args.dropout, training=training)
@@ -293,8 +328,8 @@ def train(epoch):
     X = rand_node_prop(X,training=False)
     output = model(X)
     output = torch.log_softmax(output, dim=-1)
-    loss_val = F.nll_loss(output[idx_val], labels[idx_val]) 
-    acc_val = accuracy(output[idx_val], labels[idx_val])
+    loss_val = F.nll_loss(output[idx_val], real_labels[idx_val]) 
+    acc_val = accuracy(output[idx_val], real_labels[idx_val])
     
 
     print('Epoch: {:04d}'.format(epoch+1),
@@ -368,8 +403,8 @@ def test():
     X = rand_node_prop(X, training=False)
     output = model(X)
     output = torch.log_softmax(output, dim=-1)
-    loss_test = F.nll_loss(output[idx_test], labels[idx_test])
-    acc_test = accuracy(output[idx_test], labels[idx_test])
+    loss_test = F.nll_loss(output[idx_test], real_labels[idx_test])
+    acc_test = accuracy(output[idx_test], real_labels[idx_test])
     print("Test set results:",
           "loss= {:.4f}".format(loss_test.item()),
           "accuracy= {:.4f}".format(acc_test.item()))
@@ -383,7 +418,6 @@ def test():
               "dropnode_rate: {}, "
               "dropfeature_rate: {}, "
               "dropedge_rate: {}, "
-              "alpha: {}, "
               "Loss: {:.4f}, "
               "TestAcc: {:.4f}, "
               "Overall\n").format(args.dataset,
@@ -395,7 +429,6 @@ def test():
                                   args.dropnode_rate,
                                   args.dropfeature_rate,
                                   args.dropedge_rate,
-                                  args.alpha,
                                   loss_test.item(),
                                   acc_test.item())
     log_result_pre = ( 
@@ -406,8 +439,13 @@ def test():
                                   args.dropnode_rate,
                                   args.dropfeature_rate,
                                   acc_test.item())
-    with open('{}/result/{}_{}_result_log.txt'.format(sys.path[0], args.logname, args.dataset), 'a') as f:
-        f.write(log_result)
+    if args.shots <= 20: # check if few shot is used
+        with open('{}/result/{}_{}_result_log_{}-shot.txt'.format(sys.path[0], args.logname, args.dataset, args.shots), 'a') as f:
+            f.write(log_result)
+    else:
+        with open('{}/result/{}_{}_result_log.txt'.format(sys.path[0], args.logname, args.dataset), 'a') as f:
+            f.write(log_result)
+
 
 
 Train()

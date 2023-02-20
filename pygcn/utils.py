@@ -107,8 +107,8 @@ def load_data_full(dataset_str = 'cora'):
     features[test_idx_reorder, :] = features[test_idx_range, :]
     features = normalize(features)
     graph = nx.from_dict_of_lists(graph)
-    adj = nx.adjacency_matrix(graph)
-    adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
+    or_adj = nx.adjacency_matrix(graph)
+    adj = or_adj + or_adj.T.multiply(or_adj.T > or_adj) - or_adj.multiply(or_adj.T > or_adj)
 
     
     adj = adj + sp.eye(adj.shape[0])
@@ -146,7 +146,7 @@ def load_data_full(dataset_str = 'cora'):
     idx_val = torch.LongTensor(idx_val)
     idx_test = torch.LongTensor(idx_test)
 
-    return A, adj, features, labels, idx_train, idx_val, idx_test, graph.edges()
+    return A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, graph.edges()
 
 def parse_index_file(filename):
     index = []
