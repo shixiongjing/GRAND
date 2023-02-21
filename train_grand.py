@@ -64,7 +64,7 @@ if args.cuda:
     torch.cuda.manual_seed(args.seed)
 
 # Load data
-A, adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
+A, adj, _, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
 idx_unlabel = torch.range(idx_train.shape[0], labels.shape[0]-1, dtype=int)
 
 # Model and optimizer
