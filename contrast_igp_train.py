@@ -45,6 +45,7 @@ parser.add_argument('--dropfeature_rate', type=float, default=0.2,
 parser.add_argument('--dropedge_rate', type=float, default=0.2,
                     help='Dropedge rate (1 - keep probability).')
 parser.add_argument('--alpha', type=float, default=1., help='constant controlling weight for consistency loss')
+parser.add_argument('--beta', type=float, default=1., help='constant controlling weight for contrast loss')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
 parser.add_argument('--order', type=int, default=5, help='Propagation step')
 parser.add_argument('--sample_n', type=int, default=4, help='Sampling times of dropnode')
@@ -246,6 +247,12 @@ def train(epoch):
     optimizer.zero_grad()
     loss_train = 0.
 
+    # Process original data inference
+    org_X = rand_node_prop(X, training=False)
+    org_output = torch.log_softmax(model(org_X), dim=-1)
+    pos_pair = 0.
+    neg_pair = 0.
+
     K_n = args.sample_n
     K_e = args.sample_e
     K_f = args.sample_f
@@ -266,6 +273,14 @@ def train(epoch):
 
         for k in range(K_n):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
+
+        for x in idx_train:
+            for y in idx_train:
+                for k in range(K_n):
+                    if labels[x]==labels[y]:
+                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                    else:
+                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
 
         loss_consis_node = consis_loss(output_list)
 
@@ -288,6 +303,14 @@ def train(epoch):
         for k in range(K_e):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
 
+        for x in idx_train:
+            for y in idx_train:
+                for k in range(K_e):
+                    if labels[x]==labels[y]:
+                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                    else:
+                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
+
         loss_consis_edge = consis_loss(output_list)
 
     # Add feature drops
@@ -305,18 +328,33 @@ def train(epoch):
         for k in range(K_f):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
 
+        for x in idx_train:
+            for y in idx_train:
+                for k in range(K_n):
+                    if labels[x]==labels[y]:
+                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                    else:
+                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
+
         loss_consis_feature = consis_loss(output_list)
         
+    
+    
+    
+
+
+
+
         
     loss_train = loss_train/(K_n + K_e + K_f)
     loss_consis = (loss_consis_node * K_n + loss_consis_edge * K_e + loss_consis_feature * K_f) / (K_n + K_e + K_f)
-    
+    loss_contrast = pos_pair/neg_pair
     #loss_train = F.nll_loss(output_1[idx_train], labels[idx_train]) + F.nll_loss(output_1[idx_train], labels[idx_train])
     #loss_js = js_loss(output_1[idx_unlabel], output_2[idx_unlabel])
     #loss_en = entropy_loss(output_1[idx_unlabel]) + entropy_loss(output_2[idx_unlabel])
     
 
-    loss_train = loss_train + args.alpha * loss_consis
+    loss_train = loss_train + args.alpha * loss_consis + args.beta * loss_contrast
     acc_train = accuracy(output_list[0][idx_train], labels[idx_train])
     loss_train.backward()
     optimizer.step()

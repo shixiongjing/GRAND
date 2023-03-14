@@ -7,7 +7,6 @@ import argparse
 import collections
 import numpy as np
 import sys
-import copy
 
 import torch
 import torch.nn.functional as F
@@ -15,7 +14,6 @@ import torch.optim as optim
 
 from pygcn.utils import load_data, load_data_full, accuracy, sparse_mx_to_torch_sparse_tensor
 from pygcn.models import GCN, MLP
-from IGP import get_igp_train_set
 import scipy.sparse as sp
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
@@ -26,7 +24,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--fastmode', action='store_true', default=False,
                     help='Validate during training pass.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=300,
+parser.add_argument('--epochs', type=int, default=5000,
                     help='Number of epochs to train.')
 parser.add_argument('--lr', type=float, default=0.01,
                     help='Initial learning rate.')
@@ -57,8 +55,7 @@ parser.add_argument('--cuda_device', type=int, default=4, help='Cuda device')
 parser.add_argument('--use_bn', action='store_true', default=False, help='Using Batch Normalization')
 parser.add_argument('--logname', default='df_', help='string for output log filename')
 parser.add_argument('--shots',type = int, default = 20, help = 'N-way K-shots, max == default == 20. How many samples foe each classes.')
-parser.add_argument('--active',action='store_true', default=False,
-                    help='Disables CUDA training.')
+
 #dataset = 'citeseer'
 #dataset = 'pubmed'
 args = parser.parse_args()
@@ -89,20 +86,16 @@ def N_shot(idx,labels,shots):
 
 
 # Load data
-A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
+A, features, labels, idx_train, idx_val, idx_test = load_data(dataset)
 
-real_labels = copy.deepcopy(labels)
-real_labels = real_labels.cuda()
-#if args.shots == args.shots: # check for NaN value
 new_idx_train = N_shot(idx_train,labels,args.shots)
-#if args.active:
-new_idx_train, new_labels = get_igp_train_set(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
-idx_train = new_idx_train
 
+print(new_idx_train)
+idx_train = new_idx_train
 idx_unlabel = torch.range(idx_train.shape[0], labels.shape[0]-1, dtype=int)
 
 # Model and optimizer
-model = MLP(nfeat=features.shape[1],
+model = GCN(nfeat=features.shape[1],
             nhid=args.hidden,
             nclass=labels.max().item() + 1,
             input_droprate=args.input_droprate,
@@ -246,78 +239,12 @@ def train(epoch):
     optimizer.zero_grad()
     loss_train = 0.
 
-    K_n = args.sample_n
-    K_e = args.sample_e
-    K_f = args.sample_f
-    if not K_n + K_e + K_f > 0:
-        print('Sampling for edge, node, feature drop is all zero, exit program...')
-        quit()
-
-    # Add node drops
-    loss_consis_node = 0
-    if K_n > 0 and args.dropnode_rate > 0:
-        X_list = []
-        for k in range(K_n):
-            X_list.append(rand_node_prop(X, training=True))
-
-        output_list = []
-        for k in range(K_n):
-            output_list.append(torch.log_softmax(model(X_list[k]), dim=-1))
-
-        for k in range(K_n):
-            loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
-
-        loss_consis_node = consis_loss(output_list)
-
-
-
-
-
-    # Add edge drops
-    loss_consis_edge = 0
-    if K_e > 0 and args.dropedge_rate > 0:
-        X_list = []
-        
-        for k in range(K_e):
-            X_list.append(rand_edge_prop(X, training=True))
-
-        output_list = []
-        for k in range(K_e):
-            output_list.append(torch.log_softmax(model(X_list[k]), dim=-1))
-
-        for k in range(K_e):
-            loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
-
-        loss_consis_edge = consis_loss(output_list)
-
-    # Add feature drops
-    loss_consis_feature = 0
-    if K_f > 0 and args.dropfeature_rate > 0:
-        X_list = []
-        
-        for k in range(K_f):
-            X_list.append(rand_feature_prop(X, training=True))
-
-        output_list = []
-        for k in range(K_f):
-            output_list.append(torch.log_softmax(model(X_list[k]), dim=-1))
-
-        for k in range(K_f):
-            loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
-
-        loss_consis_feature = consis_loss(output_list)
-        
-        
-    loss_train = loss_train/(K_n + K_e + K_f)
-    loss_consis = (loss_consis_node * K_n + loss_consis_edge * K_e + loss_consis_feature * K_f) / (K_n + K_e + K_f)
-    
-    #loss_train = F.nll_loss(output_1[idx_train], labels[idx_train]) + F.nll_loss(output_1[idx_train], labels[idx_train])
-    #loss_js = js_loss(output_1[idx_unlabel], output_2[idx_unlabel])
-    #loss_en = entropy_loss(output_1[idx_unlabel]) + entropy_loss(output_2[idx_unlabel])
     
 
-    loss_train = loss_train + args.alpha * loss_consis
-    acc_train = accuracy(output_list[0][idx_train], labels[idx_train])
+    
+    output = torch.log_softmax(model(X, A), dim=-1)
+    loss_train = F.nll_loss(output[idx_train], labels[idx_train])
+    acc_train = accuracy(output[idx_train], labels[idx_train])
     loss_train.backward()
     optimizer.step()
 
@@ -325,11 +252,11 @@ def train(epoch):
     model.eval()
 
     
-    X = rand_node_prop(X,training=False)
-    output = model(X)
+    
+    output = model(X, A)
     output = torch.log_softmax(output, dim=-1)
-    loss_val = F.nll_loss(output[idx_val], real_labels[idx_val]) 
-    acc_val = accuracy(output[idx_val], real_labels[idx_val])
+    loss_val = F.nll_loss(output[idx_val], labels[idx_val]) 
+    acc_val = accuracy(output[idx_val], labels[idx_val])
     
 
     print('Epoch: {:04d}'.format(epoch+1),
@@ -400,11 +327,10 @@ def Train():
 def test():
     model.eval()
     X = features
-    X = rand_node_prop(X, training=False)
-    output = model(X)
+    output = model(X, A)
     output = torch.log_softmax(output, dim=-1)
-    loss_test = F.nll_loss(output[idx_test], real_labels[idx_test])
-    acc_test = accuracy(output[idx_test], real_labels[idx_test])
+    loss_test = F.nll_loss(output[idx_test], labels[idx_test])
+    acc_test = accuracy(output[idx_test], labels[idx_test])
     print("Test set results:",
           "loss= {:.4f}".format(loss_test.item()),
           "accuracy= {:.4f}".format(acc_test.item()))
@@ -439,13 +365,8 @@ def test():
                                   args.dropnode_rate,
                                   args.dropfeature_rate,
                                   acc_test.item())
-    if args.shots <= 20: # check if few shot is used
-        with open('{}/result/{}_{}_result_log_{}-shot.txt'.format(sys.path[0], args.logname, args.dataset, args.shots), 'a') as f:
-            f.write(log_result)
-    else:
-        with open('{}/result/{}_{}_result_log.txt'.format(sys.path[0], args.logname, args.dataset), 'a') as f:
-            f.write(log_result)
-
+    with open('{}/result/{}_{}_result_log_{}-shot.txt'.format(sys.path[0], args.logname, args.dataset,args.shots), 'a') as f:
+        f.write(log_result)
 
 
 Train()

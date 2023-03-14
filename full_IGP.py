@@ -19,7 +19,7 @@ from tqdm import tqdm
 from pygcn.models import GCN_sim, MLP
 from pygcn.utils import accuracy, sparse_mx_to_torch_sparse_tensor
 
-shots = 1
+
     
 def get_receptive_fields_dense(cur_neighbors, selected_node, weighted_score, adj_matrix2): 
     receptive_vector=((adj_matrix2[selected_node]))+0
@@ -86,32 +86,29 @@ def aug_normalized_adjacency(adj):
 
 
    
-def train(model, record, optimizer, features_GCN, idx_train1, idx_train2, idx_test, idx_val, tmp_labels, labels, adj):
+def train(model, record, optimizer, features_GCN, idx_train1, idx_test, idx_val, tmp_labels, labels, adj):
 
     model.train()
     optimizer.zero_grad()
     output = model(features_GCN, adj)
-    loss_train1 = F.cross_entropy(output[idx_train1], tmp_labels[idx_train1])
-    loss_train2_f = nn.KLDivLoss()
-    loss_train2 = loss_train2_f(F.log_softmax(output[idx_train2],dim=1), F.softmax(labels[idx_train2],dim=1))
-    loss_train = loss_train1+loss_train2
+    loss_train = F.cross_entropy(output[idx_train1], tmp_labels[idx_train1])
     loss_train.backward()
     optimizer.step()
     model.eval()
     output = model(features_GCN, adj)
 
-    loss_val = F.cross_entropy(output[idx_val], tmp_labels[idx_val])
+    #loss_val = F.cross_entropy(output[idx_val], tmp_labels[idx_val])
     acc_val = accuracy(output[idx_val], tmp_labels[idx_val])
-    loss_test = F.cross_entropy(output[idx_test], tmp_labels[idx_test])
+    #loss_test = F.cross_entropy(output[idx_test], tmp_labels[idx_test])
     acc_test = accuracy(output[idx_test], tmp_labels[idx_test])
     record[acc_val.item()] = acc_test.item()
 
 def update_model_prediction(features, labels, adj, args,
                             features_GCN, idx_train1, 
-                            idx_train2, idx_test, idx_val, tmp_labels):
+                            idx_test, idx_val, real_labels):
     model = GCN_sim(nfeat=features_GCN.shape[1],
             nhid=args.hidden,
-            nclass=len(set(tmp_labels.cpu().numpy())),
+            nclass=len(set(real_labels.cpu().numpy())),
             dropout=0.85)
     
     optimizer = optim.Adam(model.parameters(),
@@ -120,7 +117,7 @@ def update_model_prediction(features, labels, adj, args,
     record = {}
     for epoch in range(100):
         train(model, record, optimizer, features_GCN, idx_train1, 
-              idx_train2, idx_test, idx_val, tmp_labels, labels, adj)
+            idx_test, idx_val, real_labels, labels, adj)
         # print('IGP_Epoch: {:04d}'.format(epoch+1))
     output = model(features_GCN, adj)
     sfl = nn.Softmax(dim=1)
@@ -184,46 +181,26 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
     degree_result = []
     nodes_degree = []
     count = 0
-    #c = 0
+   
     for i in range(num_node):
         tmp_list = []
         tmp_list.append(i)
         cur_neighbors = get_current_neighbors_1(tmp_list, adj_matrix)
         tmp_degree = float(np.ones(num_node).dot(cur_neighbors))
-        # if i in list(idx_train.cpu().numpy()):
-        #     c += 1
-        #     print(i,c)
         nodes_degree.append([i,tmp_degree])
     nodes_degree.sort(key = lambda x:x[1],reverse=True)
-    #c = 0
     for i in range(num_node):
         if nodes_degree[i][0] in idx_avaliable:
-            # if nodes_degree[i][0] in list(idx_train.cpu().numpy()):
-            #     print('im printing')
-            #     c += 1
-            #     print(nodes_degree[i][0],c)
             degree_result.append(nodes_degree[i][0])
     degree_flag = 0
     
-    #print(len(degree_result),len(idx_val),len(idx_test))
-    #sys.exit()
-
-    for node in list(idx_train.cpu().numpy()):
-        #print(node)
+    for node in idx_train:
         degree_result.remove(node)
         label_ = tmp_labels[node].item()
         new_labels[node] = 0
         new_labels[node][label_] = 1
     
-    idx_train1 = []
-    idx_train2 = []
-    for node in idx_train:
-        if np.max(new_labels[node]) == 1:
-            idx_train1.append(node)
-        else:
-            idx_train2.append(node)
-    idx_train1 = torch.LongTensor(idx_train).cuda()
-    idx_train2 = torch.LongTensor(idx_train).cuda()
+    
 
     idx_avaliable = degree_result[0:num_aval]
     idx_avaliable_temp = copy.deepcopy(idx_avaliable)
@@ -235,15 +212,14 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
     
     
     model_prediction = update_model_prediction(features, new_labels, adj, args,
-                            features_GCN, idx_train1, 
-                            idx_train2, idx_test, idx_val, n_labels)
+                            features_GCN, idx_train, 
+                            idx_test, idx_val, n_labels)
     idx_train = list(idx_train.cpu())
     new_labels = np.array(new_labels.cpu()) 
     
     tmp_labels = tmp_labels.cpu().numpy()
 
     class_count = [0]*num_class
-    prev = []
     while True:
         t1 = time.time()
     
@@ -260,18 +236,9 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
             idx_avaliable_temp.remove(max_info_entropy_node)
             cnt1+=1
             
-            if max_info_entropy_node not in idx_train and class_count[tmp_class] <= shots:
+            if max_info_entropy_node not in idx_train and class_count[tmp_class] <= args.shots:
                 idx_train.append(max_info_entropy_node)  
-            # if count%(num_class*(num_class-1))==0:
-            #     idx_train1 = []
-            #     idx_train2 = []
-            #     for node in idx_train:
-            #         if np.max(new_labels[node]) == 1:
-            #             idx_train1.append(node)
-            #         else:
-            #             idx_train2.append(node)
-                 
-
+            
                 class_count[tmp_class] += 1
 
             # No need for checking correctness of labeling
@@ -279,36 +246,13 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
                 new_labels[max_info_entropy_node] = 0
                 new_labels[max_info_entropy_node][tmp_class] = 1
                 tmp_labels[max_info_entropy_node] = tmp_class
-            # if tmp_class == tmp_labels[max_info_entropy_node].item():
-            #     new_labels[max_info_entropy_node] = 0
-            #     new_labels[max_info_entropy_node][tmp_class] = 1
-            #     idx_avaliable.remove(max_info_entropy_node)
-            #     idx_avaliable_temp.remove(max_info_entropy_node)
-            #     cnt1+=1
-            # else:
-            #     label_flag[max_info_entropy_node][tmp_class] = 0
-            #     pred_vec = model_prediction[max_info_entropy_node]*label_flag[max_info_entropy_node]
-            #     pred_sum = np.sum(pred_vec)
-            #     for j in range(num_class):
-            #         new_labels[max_info_entropy_node][j] = pred_vec[j]/pred_sum
-            #     if np.max(new_labels[max_info_entropy_node]) == 1:
-            #         idx_avaliable.remove(max_info_entropy_node)
-            #         idx_avaliable_temp.remove(max_info_entropy_node)
-            #         cnt1+=1
-        idx_train1 = []
-        idx_train2 = []
-        for node in idx_train:
-            if np.max(new_labels[node]) == 1:
-                idx_train1.append(node)
-            else:
-                idx_train2.append(node)
-        idx_train1 = torch.LongTensor(idx_train1).cuda()
-        idx_train2 = torch.LongTensor(idx_train2).cuda()
+            
+       
         new_labels = torch.FloatTensor(new_labels).cuda()
         idx_train = torch.LongTensor(idx_train).cuda()
         model_prediction = update_model_prediction(features, new_labels, adj, args,
-                            features_GCN, idx_train1, 
-                            idx_train2, idx_test, idx_val, n_labels)
+                            features_GCN, idx_train, 
+                            idx_test, idx_val, n_labels)
         #model_prediction = model_prediction * label_flag
         idx_train = list(idx_train.cpu())
 
@@ -321,7 +265,7 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
             idx_avaliable_temp.append(tmp_node)
         new_labels = np.array(new_labels.cpu())
         print('IGP_Progress: {} / {}'.format(count, num_coreset))
-        if min(class_count)>= shots:
+        if min(class_count)>=args.shots * args.expand:
             break
         if count > num_coreset:
             break
@@ -332,3 +276,143 @@ def get_igp_train_set(adj, features, n_labels, idx_train, idx_val, idx_test, arg
     return idx_train, tmp_labels
 
 
+def get_igp_train_set_unbalanced(adj, features, n_labels, idx_train, idx_val, idx_test, args):
+    num_node = adj.shape[0]
+    num_class = len(set(n_labels.numpy()))
+    n_labels = n_labels.cuda()
+    
+    # sys.exit()
+    num_aval = 20
+    num_coreset = num_class*(num_class-1)
+    batch_size = 5
+    
+    if args.dataset == 'pubmed':
+        num_coreset *= 5
+
+
+    print(num_coreset) 
+
+    tmp_labels = copy.deepcopy(n_labels)
+    tmp_labels = tmp_labels.cuda()
+    
+    #print(sorted(list(idx_train.cpu().numpy())))
+    #sys.exit()
+
+    idx_val = list(idx_val.cpu().numpy())
+    idx_test = list(idx_test.cpu().numpy())
+    idx_avaliable = list()
+    for i in range(num_node):
+        if i not in idx_val and i not in idx_test:
+        
+            idx_avaliable.append(i)
+    #print(len(idx_avaliable))
+    #sys.exit()
+    #compute normalized distance
+    adj = aug_normalized_adjacency(adj)
+    adj_matrix = torch.FloatTensor(adj.todense()).cuda()
+    adj_matrix2 = torch.mm(adj_matrix,adj_matrix).cuda()
+    adj_matrix2 = np.array(adj_matrix2.cpu())
+    adj = sparse_mx_to_torch_sparse_tensor(adj).float().cuda()
+    features_GCN = copy.deepcopy(features) 
+    features_GCN = torch.FloatTensor(features_GCN).cuda()
+
+    model_prediction = np.full((num_node,num_class),1/num_class)
+    new_labels = np.full((num_node,num_class),1/num_class)
+
+    adj_matrix = np.array(adj_matrix.cpu())
+    degree_result = []
+    nodes_degree = []
+    count = 0
+   
+    for i in range(num_node):
+        tmp_list = []
+        tmp_list.append(i)
+        cur_neighbors = get_current_neighbors_1(tmp_list, adj_matrix)
+        tmp_degree = float(np.ones(num_node).dot(cur_neighbors))
+        nodes_degree.append([i,tmp_degree])
+    nodes_degree.sort(key = lambda x:x[1],reverse=True)
+    for i in range(num_node):
+        if nodes_degree[i][0] in idx_avaliable:
+            degree_result.append(nodes_degree[i][0])
+    degree_flag = 0
+    
+    for node in idx_train:
+        degree_result.remove(node)
+        label_ = tmp_labels[node].item()
+        new_labels[node] = 0
+        new_labels[node][label_] = 1
+    
+    
+
+    idx_avaliable = degree_result[0:num_aval]
+    idx_avaliable_temp = copy.deepcopy(idx_avaliable)
+    new_labels = torch.FloatTensor(new_labels).cuda()
+    idx_train = torch.LongTensor(idx_train).cuda()
+    idx_val = torch.LongTensor(idx_val).cuda()
+    idx_test = torch.LongTensor(idx_test).cuda()
+    count = 0
+    
+    
+    model_prediction = update_model_prediction(features, new_labels, adj, args,
+                            features_GCN, idx_train, 
+                            idx_test, idx_val, n_labels)
+    idx_train = list(idx_train.cpu())
+    new_labels = np.array(new_labels.cpu()) 
+    
+    tmp_labels = tmp_labels.cpu().numpy()
+
+    class_count = [0]*num_class
+    while True:
+        t1 = time.time()
+    
+        max_info_entropy_node_set = get_max_info_entropy_node_set(idx_avaliable_temp, new_labels, batch_size, model_prediction, num_class, adj_matrix2)
+        print(max_info_entropy_node_set) 
+        cnt1 = 0
+        for i in range(batch_size): 
+            count += 1     
+            max_info_entropy_node = max_info_entropy_node_set[i]
+            tmp_class = np.argmax(model_prediction[max_info_entropy_node])
+
+            # Remove nodes anyway top prevent it from appearing again
+            idx_avaliable.remove(max_info_entropy_node)
+            idx_avaliable_temp.remove(max_info_entropy_node)
+            cnt1+=1
+            
+            if max_info_entropy_node not in idx_train:
+                idx_train.append(max_info_entropy_node)  
+            
+                class_count[tmp_class] += 1
+
+            # No need for checking correctness of labeling
+            
+                new_labels[max_info_entropy_node] = 0
+                new_labels[max_info_entropy_node][tmp_class] = 1
+                tmp_labels[max_info_entropy_node] = tmp_class
+            
+       
+        new_labels = torch.FloatTensor(new_labels).cuda()
+        idx_train = torch.LongTensor(idx_train).cuda()
+        model_prediction = update_model_prediction(features, new_labels, adj, args,
+                            features_GCN, idx_train, 
+                            idx_test, idx_val, n_labels)
+        # model_prediction = model_prediction * label_flag
+        idx_train = list(idx_train.cpu())
+
+        # remove nodes with filled label
+        
+        for i in range(cnt1):
+            tmp_node = degree_result[degree_flag+num_aval]
+            degree_flag += 1
+            idx_avaliable.append(tmp_node)
+            idx_avaliable_temp.append(tmp_node)
+        new_labels = np.array(new_labels.cpu())
+        print('IGP_Progress: {} / {}'.format(count, num_coreset))
+        if min(class_count)>= args.shots + args.expand:
+            break
+        if count > num_coreset:
+            break
+
+        print(class_count)
+    tmp_labels = torch.LongTensor(tmp_labels).cuda()
+    idx_train = torch.LongTensor(idx_train).cuda()
+    return idx_train, tmp_labels

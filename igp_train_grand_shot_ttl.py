@@ -15,7 +15,7 @@ import torch.optim as optim
 
 from pygcn.utils import load_data, load_data_full, accuracy, sparse_mx_to_torch_sparse_tensor
 from pygcn.models import GCN, MLP
-from IGP import get_igp_train_set
+from IGP import get_igp_train_set, get_igp_train_set_unbalanced
 import scipy.sparse as sp
 from sklearn.preprocessing import StandardScaler
 scaler = StandardScaler()
@@ -26,7 +26,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--fastmode', action='store_true', default=False,
                     help='Validate during training pass.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=300,
+parser.add_argument('--epochs', type=int, default=5000,
                     help='Number of epochs to train.')
 parser.add_argument('--lr', type=float, default=0.01,
                     help='Initial learning rate.')
@@ -58,7 +58,11 @@ parser.add_argument('--use_bn', action='store_true', default=False, help='Using 
 parser.add_argument('--logname', default='df_', help='string for output log filename')
 parser.add_argument('--shots',type = int, default = 20, help = 'N-way K-shots, max == default == 20. How many samples foe each classes.')
 parser.add_argument('--active',action='store_true', default=False,
-                    help='Disables CUDA training.')
+                    help='Use active learning (IGP).')
+parser.add_argument('--balance',action='store_true', default=False,
+                    help='Turn on forcing the nodes to be balanced.')
+parser.add_argument('--expand', type=float, default=1., help='expand ratio for shots on active learning.')
+
 #dataset = 'citeseer'
 #dataset = 'pubmed'
 args = parser.parse_args()
@@ -93,11 +97,14 @@ A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, edges = load_dat
 
 real_labels = copy.deepcopy(labels)
 real_labels = real_labels.cuda()
-#if args.shots == args.shots: # check for NaN value
-new_idx_train = N_shot(idx_train,labels,args.shots)
-#if args.active:
-new_idx_train, new_labels = get_igp_train_set(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
-idx_train = new_idx_train
+if args.shots == args.shots: # check for NaN value
+    new_idx_train = N_shot(idx_train,labels,args.shots)
+    if args.active:
+        if args.balance:
+            new_idx_train, new_labels = get_igp_train_set(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
+        else:
+            new_idx_train, new_labels = get_igp_train_set_unbalanced(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
+    idx_train = new_idx_train
 
 idx_unlabel = torch.range(idx_train.shape[0], labels.shape[0]-1, dtype=int)
 
