@@ -247,11 +247,11 @@ def train(epoch):
     optimizer.zero_grad()
     loss_train = 0.
 
+
     # Process original data inference
     org_X = rand_node_prop(X, training=False)
     org_output = torch.log_softmax(model(org_X), dim=-1)
-    pos_pair = 0.
-    neg_pair = 0.
+    loss_contrast = 0
 
     K_n = args.sample_n
     K_e = args.sample_e
@@ -274,13 +274,18 @@ def train(epoch):
         for k in range(K_n):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
 
-        for x in idx_train:
-            for y in idx_train:
-                for k in range(K_n):
+        
+        
+        for k in range(K_n):
+            pos_pair = 0
+            neg_pair = 0
+            for x in idx_train:
+                for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
                     else:
-                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+            loss_contrast += pos_pair/(pos_pair + neg_pair)
 
         loss_consis_node = consis_loss(output_list)
 
@@ -303,13 +308,16 @@ def train(epoch):
         for k in range(K_e):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
 
-        for x in idx_train:
-            for y in idx_train:
-                for k in range(K_e):
+        for k in range(K_e):
+            pos_pair = 0
+            neg_pair = 0
+            for x in idx_train:
+                for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
                     else:
-                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+            loss_contrast += pos_pair/(pos_pair + neg_pair)
 
         loss_consis_edge = consis_loss(output_list)
 
@@ -328,13 +336,16 @@ def train(epoch):
         for k in range(K_f):
             loss_train += F.nll_loss(output_list[k][idx_train], labels[idx_train])
 
-        for x in idx_train:
-            for y in idx_train:
-                for k in range(K_n):
+        for k in range(K_f):
+            pos_pair = 0
+            neg_pair = 0
+            for x in idx_train:
+                for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
                     else:
-                        neg_pair += F.cross_entropy(output_list[k][x], org_output[y])
+                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+            loss_contrast += pos_pair/(pos_pair + neg_pair)
 
         loss_consis_feature = consis_loss(output_list)
         
@@ -348,7 +359,6 @@ def train(epoch):
         
     loss_train = loss_train/(K_n + K_e + K_f)
     loss_consis = (loss_consis_node * K_n + loss_consis_edge * K_e + loss_consis_feature * K_f) / (K_n + K_e + K_f)
-    loss_contrast = pos_pair/neg_pair
     #loss_train = F.nll_loss(output_1[idx_train], labels[idx_train]) + F.nll_loss(output_1[idx_train], labels[idx_train])
     #loss_js = js_loss(output_1[idx_unlabel], output_2[idx_unlabel])
     #loss_en = entropy_loss(output_1[idx_unlabel]) + entropy_loss(output_2[idx_unlabel])
