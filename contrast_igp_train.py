@@ -282,10 +282,10 @@ def train(epoch):
             for x in idx_train:
                 for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+                        pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
-                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
-            loss_contrast += pos_pair/(pos_pair + neg_pair)
+                        neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
+            loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
 
         loss_consis_node = consis_loss(output_list)
 
@@ -314,10 +314,10 @@ def train(epoch):
             for x in idx_train:
                 for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+                        pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
-                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
-            loss_contrast += pos_pair/(pos_pair + neg_pair)
+                        neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
+            loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
 
         loss_consis_edge = consis_loss(output_list)
 
@@ -342,10 +342,10 @@ def train(epoch):
             for x in idx_train:
                 for y in idx_train:
                     if labels[x]==labels[y]:
-                        pos_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
+                        pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
-                        neg_pair += F.cosine_similarity(output_list[k][x], org_output[y], dim=0)
-            loss_contrast += pos_pair/(pos_pair + neg_pair)
+                        neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
+            loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
 
         loss_consis_feature = consis_loss(output_list)
         

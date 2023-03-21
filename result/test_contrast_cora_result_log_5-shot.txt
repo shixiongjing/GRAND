@@ -27,3 +27,16 @@ dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_r
 dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.2078, TestAcc: 0.6730, Overall
 dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.1214, TestAcc: 0.6450, Overall
 dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0860, TestAcc: 0.7450, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0528, TestAcc: 0.7730, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0471, TestAcc: 0.7290, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.6747, TestAcc: 0.3180, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0675, TestAcc: 0.7200, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.1202, TestAcc: 0.6740, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.6700, TestAcc: 0.3240, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0366, TestAcc: 0.7690, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0337, TestAcc: 0.7140, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0446, TestAcc: 0.7800, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.5221, TestAcc: 0.3500, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.4158, TestAcc: 0.4650, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.0014, TestAcc: 0.7780, Overall
+dataset: cora, lr: 0.01, epochs: 300, hidden: 32, tem: 0.5, lam: 1.0, dropnode_rate: 0.5, dropfeature_rate: 0.2, dropedge_rate: 0.2, Loss: 1.1246, TestAcc: 0.7350, Overall
