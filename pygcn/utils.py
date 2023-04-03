@@ -1,5 +1,5 @@
 import sys
-
+import pickle
 import pickle as pkl
 
 import networkx as nx
@@ -148,6 +148,169 @@ def load_data_full(dataset_str = 'cora'):
 
     return A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, graph.edges()
 
+def load_data_extra(dataset_str = 'cora'):
+    if dataset_str == 'dblp' or dataset_str == 'reddit':
+        from torch_geometric.transforms import NormalizeFeatures
+        from torch_geometric.utils import to_dense_adj
+        # if dataset_str == 'dblp':
+        #     from torch_geometrics.datasets import CitationFull
+        #     dataset = CitationFull(root = 'data/CitationFull', name = 'dblp', transform=NormalizeFeatures())
+        #     data = dataset[3]
+        if dataset_str == 'dblp':
+            adj_file=open('./data/dblp/edges.pkl','rb')
+            label_file=open('./data/dblp/labels.pkl','rb')
+            feature_file=open('./data/dblp/node_features.pkl','rb')
+            adj_list=pickle.load(adj_file)
+            labels_list=pickle.load(label_file)
+            features_list=pickle.load(feature_file)
+            or_adj=adj_list[0]+adj_list[1]+adj_list[2]+adj_list[3]
+            label=labels_list[0]+labels_list[1]+labels_list[2]
+            features=features_list
+            #adj=adj.todense()
+            labels=np.array(label)
+            features=np.array(features)
+            
+   
+            # build symmetric adjacency matrix
+            
+            adj = or_adj + or_adj.T.multiply(or_adj.T > or_adj) - or_adj.multiply(or_adj.T > or_adj)
+            G = nx.from_scipy_sparse_matrix(or_adj)
+
+            features = normalize(features)
+            adj = normalize(adj + sp.eye(adj.shape[0]))
+
+            D1 = np.array(adj.sum(axis=1))**(-0.5)
+            D2 = np.array(adj.sum(axis=0))**(-0.5)
+            D1 = sp.diags(D1[:,0], format='csr')
+            D2 = sp.diags(D2[0,:], format='csr')
+            
+            A = adj.dot(D1)
+            A = D2.dot(A)
+
+            idx_train = range(0,2400)
+            idx_val = range(2400, 3200)
+            idx_test = range(3200, 4000)
+
+            features = torch.FloatTensor(features)
+
+            labels = list(labels[:, -1]) + [-1]*(18405 - 4057)
+            labels = torch.LongTensor(labels)
+            print('Label shape: ', str(labels.shape))
+            adj = sparse_mx_to_torch_sparse_tensor(adj)
+            A = sparse_mx_to_torch_sparse_tensor(A)
+
+            idx_train = torch.LongTensor(idx_train)
+            idx_val = torch.LongTensor(idx_val)
+            idx_test = torch.LongTensor(idx_test)
+
+            return A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, G.edges()
+
+
+
+
+        elif dataset_str == 'reddit':
+            from torch_geometrics.datasets import Reddit
+            dataset = Reddit(root = 'data/Reddit', name = 'reddit', transform=NormalizeFeatures())
+            data = dataset[0]
+
+        print()
+        print(data)
+        print('===========================================================================================================')
+
+        # Gather some statistics about the graph.
+        print(f'Number of nodes: {data.num_nodes}')
+        print(f'Number of edges: {data.num_edges}')
+        print(f'Average node degree: {data.num_edges / data.num_nodes:.2f}')
+        print(f'Number of training nodes: {data.train_mask.sum()}')
+        print(f'Training node label rate: {int(data.train_mask.sum()) / data.num_nodes:.2f}')
+        print(f'Has isolated nodes: {data.has_isolated_nodes()}')
+        print(f'Has self-loops: {data.has_self_loops()}')
+        print(f'Is undirected: {data.is_undirected()}')
+
+        features = data.x
+        labels = data.y
+        adj = data.edge_index
+        # idx_train = range(len(y))
+        # idx_val = range(len(y), len(y)+500)
+        # idx_test = test_idx_range.tolist()
+        # idx_train = torch.LongTensor(idx_train)
+        # idx_val = torch.LongTensor(idx_val)
+        # idx_test = torch.LongTensor(idx_test)  
+        sys.exit()
+
+
+
+
+
+
+
+    else:
+        names = ['x', 'y', 'tx', 'ty', 'allx', 'ally', 'graph']
+        objects = []
+        for i in range(len(names)):
+            with open("data/ind.{}.{}".format(dataset_str, names[i]), 'rb') as f:
+                if sys.version_info > (3, 0):
+                    objects.append(pkl.load(f, encoding='latin1'))
+                else:
+                    objects.append(pkl.load(f))
+        x, y, tx, ty, allx, ally, graph = tuple(objects)
+        test_idx_reorder = parse_index_file("data/ind.{}.test.index".format(dataset_str))
+        test_idx_range = np.sort(test_idx_reorder)
+
+        if dataset_str == 'citeseer':
+            test_idx_range_full = range(min(test_idx_reorder), max(test_idx_reorder)+1)
+            tx_extended = sp.lil_matrix((len(test_idx_range_full), x.shape[1]))
+            tx_extended[test_idx_range-min(test_idx_range), :] = tx
+            tx = tx_extended
+            ty_extended = np.zeros((len(test_idx_range_full), y.shape[1]))
+            ty_extended[test_idx_range-min(test_idx_range), :] = ty
+            ty = ty_extended
+
+        features = sp.vstack((allx, tx)).tolil()
+        features[test_idx_reorder, :] = features[test_idx_range, :]
+        features = normalize(features)
+        graph = nx.from_dict_of_lists(graph)
+        or_adj = nx.adjacency_matrix(graph)
+        adj = or_adj + or_adj.T.multiply(or_adj.T > or_adj) - or_adj.multiply(or_adj.T > or_adj)
+
+        
+        adj = adj + sp.eye(adj.shape[0])
+    
+    """
+    D1_ = np.array(adj.sum(axis=1))**(-0.5)
+    D2_ = np.array(adj.sum(axis=0))**(-0.5)
+    D1_ = sp.diags(D1_[:,0], format='csr')
+    D2_ = sp.diags(D2_[0,:], format='csr')
+    A_ = adj.dot(D1_)
+    A_ = D2_.dot(A_)
+    """
+    
+    D1 = np.array(adj.sum(axis=1))**(-0.5)
+    D2 = np.array(adj.sum(axis=0))**(-0.5)
+    D1 = sp.diags(D1[:,0], format='csr')
+    D2 = sp.diags(D2[0,:], format='csr')
+    
+    A = adj.dot(D1)
+    A = D2.dot(A)
+
+
+    labels = np.vstack((ally, ty))
+    labels[test_idx_reorder, :] = labels[test_idx_range, :]     # onehot
+
+    idx_train = range(len(y))
+    idx_val = range(len(y), len(y)+500)
+    idx_test = test_idx_range.tolist()
+
+    features = torch.FloatTensor(np.array(features.todense()))
+    labels = torch.LongTensor(np.argmax(labels, -1))
+    A = sparse_mx_to_torch_sparse_tensor(A)
+    adj = sparse_mx_to_torch_sparse_tensor(adj)
+    idx_train = torch.LongTensor(idx_train)
+    idx_val = torch.LongTensor(idx_val)
+    idx_test = torch.LongTensor(idx_test)
+
+    return A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, graph.edges()
+
 def parse_index_file(filename):
     index = []
     for line in open(filename):
@@ -155,7 +318,7 @@ def parse_index_file(filename):
     return index
 
 def normalize(mx):
-    rowsum = np.array(mx.sum(1))
+    rowsum = np.array(mx.sum(1) ,dtype=np.float32)
     r_inv = np.power(rowsum, -1).flatten()
     r_inv[np.isinf(r_inv)] = 0.
     r_mat_inv = sp.diags(r_inv)

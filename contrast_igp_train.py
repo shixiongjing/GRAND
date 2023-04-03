@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
-from pygcn.utils import load_data, load_data_full, accuracy, sparse_mx_to_torch_sparse_tensor
+from pygcn.utils import load_data, load_data_full, load_data_extra, accuracy, sparse_mx_to_torch_sparse_tensor
 from pygcn.models import GCN, MLP
 from IGP import get_igp_train_set
 import scipy.sparse as sp
@@ -26,7 +26,7 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
 parser.add_argument('--fastmode', action='store_true', default=False,
                     help='Validate during training pass.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=300,
+parser.add_argument('--epochs', type=int, default=500,
                     help='Number of epochs to train.')
 parser.add_argument('--lr', type=float, default=0.01,
                     help='Initial learning rate.')
@@ -38,14 +38,14 @@ parser.add_argument('--input_droprate', type=float, default=0.5,
                     help='Dropout rate of the input layer (1 - keep probability).')
 parser.add_argument('--hidden_droprate', type=float, default=0.5,
                     help='Dropout rate of the hidden layer (1 - keep probability).')
-parser.add_argument('--dropnode_rate', type=float, default=0.5,
+parser.add_argument('--dropnode_rate', type=float, default=0.2,
                     help='Dropnode rate (1 - keep probability).')
 parser.add_argument('--dropfeature_rate', type=float, default=0.2,
                     help='Dropfeature rate (1 - keep probability).')
 parser.add_argument('--dropedge_rate', type=float, default=0.2,
                     help='Dropedge rate (1 - keep probability).')
-parser.add_argument('--alpha', type=float, default=1., help='constant controlling weight for consistency loss')
-parser.add_argument('--beta', type=float, default=1., help='constant controlling weight for contrast loss')
+parser.add_argument('--alpha', type=float, default=0.5, help='constant controlling weight for consistency loss')
+parser.add_argument('--beta', type=float, default=0.1, help='constant controlling weight for contrast loss')
 parser.add_argument('--patience', type=int, default=100, help='Patience')
 parser.add_argument('--order', type=int, default=5, help='Propagation step')
 parser.add_argument('--sample_n', type=int, default=4, help='Sampling times of dropnode')
@@ -60,6 +60,9 @@ parser.add_argument('--logname', default='df_', help='string for output log file
 parser.add_argument('--shots',type = int, default = 20, help = 'N-way K-shots, max == default == 20. How many samples foe each classes.')
 parser.add_argument('--active',action='store_true', default=False,
                     help='Disables CUDA training.')
+parser.add_argument('--unbalance',action='store_true', default=False,
+                    help='Turn on to remove the balancing requirement')
+parser.add_argument('--expand', type=float, default=1., help='expand ratio for shots on active learning.')
 #dataset = 'citeseer'
 #dataset = 'pubmed'
 args = parser.parse_args()
@@ -90,15 +93,14 @@ def N_shot(idx,labels,shots):
 
 
 # Load data
-A, adj, or_adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_full(dataset)
+A, adj, or_adj, features, labels, org_idx_train, idx_val, idx_test, edges = load_data_extra(dataset)
 
 real_labels = copy.deepcopy(labels)
 real_labels = real_labels.cuda()
 #if args.shots == args.shots: # check for NaN value
-new_idx_train = N_shot(idx_train,labels,args.shots)
+shot_idx_train = N_shot(org_idx_train,labels,args.shots)
 #if args.active:
-new_idx_train, new_labels = get_igp_train_set(or_adj, features, labels, new_idx_train, idx_val, idx_test, args)
-idx_train = new_idx_train
+idx_train, new_labels = get_igp_train_set(or_adj, features, labels, shot_idx_train, idx_val, idx_test, args)
 
 idx_unlabel = torch.range(idx_train.shape[0], labels.shape[0]-1, dtype=int)
 
@@ -239,7 +241,8 @@ def consis_loss(logps, temp=args.tem):
     return args.lam * loss
 
 def train(epoch):
-    t = time.time()
+    init_t = time.time()
+    looptime = 0
     
     X = features
     
@@ -279,13 +282,16 @@ def train(epoch):
         for k in range(K_n):
             pos_pair = 0
             neg_pair = 0
-            for x in idx_train:
-                for y in idx_train:
+            temptime = time.time()
+            for x in shot_idx_train:
+                for y in shot_idx_train:
                     if labels[x]==labels[y]:
                         pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
                         neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
             loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
+            looptime += time.time() - temptime
+            
 
         loss_consis_node = consis_loss(output_list)
 
@@ -311,13 +317,15 @@ def train(epoch):
         for k in range(K_e):
             pos_pair = 0
             neg_pair = 0
-            for x in idx_train:
-                for y in idx_train:
+            temptime = time.time()
+            for x in shot_idx_train:
+                for y in shot_idx_train:
                     if labels[x]==labels[y]:
                         pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
                         neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
             loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
+            looptime += time.time() - temptime
 
         loss_consis_edge = consis_loss(output_list)
 
@@ -339,13 +347,15 @@ def train(epoch):
         for k in range(K_f):
             pos_pair = 0
             neg_pair = 0
-            for x in idx_train:
-                for y in idx_train:
+            temptime = time.time()
+            for x in shot_idx_train:
+                for y in shot_idx_train:
                     if labels[x]==labels[y]:
                         pos_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
                     else:
                         neg_pair += torch.exp(F.cosine_similarity(output_list[k][x], org_output[y], dim=0)/args.tem)
             loss_contrast += -torch.log(pos_pair/(pos_pair + neg_pair))
+            looptime += time.time() - temptime
 
         loss_consis_feature = consis_loss(output_list)
         
@@ -362,13 +372,18 @@ def train(epoch):
     #loss_train = F.nll_loss(output_1[idx_train], labels[idx_train]) + F.nll_loss(output_1[idx_train], labels[idx_train])
     #loss_js = js_loss(output_1[idx_unlabel], output_2[idx_unlabel])
     #loss_en = entropy_loss(output_1[idx_unlabel]) + entropy_loss(output_2[idx_unlabel])
-    
+    augtime = time.time()
+    elapsed_time = augtime - init_t
+    print(f"loss computation elapsed time in seconds: {looptime:.5f}")
+    print(f"Augmentation time spent in seconds: {elapsed_time:.5f}")
 
     loss_train = loss_train + args.alpha * loss_consis + args.beta * loss_contrast
     acc_train = accuracy(output_list[0][idx_train], labels[idx_train])
     loss_train.backward()
     optimizer.step()
 
+    elapsed_time = time.time() - augtime
+    print(f"Back Propagation time in seconds: {elapsed_time:.5f}")
     # Evaluation Stage
     model.eval()
 
@@ -385,7 +400,7 @@ def train(epoch):
           'acc_train: {:.4f}'.format(acc_train.item()),
           'loss_val: {:.4f}'.format(loss_val.item()),
           'acc_val: {:.4f}'.format(acc_val.item()),
-          'time: {:.4f}s'.format(time.time() - t))
+          'time: {:.4f}s'.format(time.time() - init_t))
     return loss_val.item(), acc_val.item()
 
 
@@ -466,6 +481,8 @@ def test():
               "dropnode_rate: {}, "
               "dropfeature_rate: {}, "
               "dropedge_rate: {}, "
+              "alpha: {}, "
+              "beta: {}, "
               "Loss: {:.4f}, "
               "TestAcc: {:.4f}, "
               "Overall\n").format(args.dataset,
@@ -477,6 +494,8 @@ def test():
                                   args.dropnode_rate,
                                   args.dropfeature_rate,
                                   args.dropedge_rate,
+                                  args.alpha,
+                                  args.beta,
                                   loss_test.item(),
                                   acc_test.item())
     log_result_pre = ( 
